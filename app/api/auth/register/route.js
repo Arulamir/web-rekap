@@ -35,7 +35,7 @@ export async function POST(req) {
   try {
     await sendVerificationEmail({ to: email, name, url: `${appUrl(req)}/api/auth/verify?token=${token.raw}` });
   } catch (err) {
-    console.error('Resend error:', err);
+    console.error('SMTP email error:', { code: err.code, responseCode: err.responseCode });
     return json({ error: `Akun dibuat, tetapi email verifikasi gagal dikirim: ${err.message}` }, 502);
   }
   return json({ ok: true, message: `Link verifikasi telah dikirim ke ${email}. Cek inbox/spam Anda.` });

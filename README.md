@@ -1,10 +1,10 @@
 # Rekap Reimburse
 
-Website pencatatan reimburse perusahaan. Dibuat dengan Next.js, Neon Postgres, Resend, dan export PDF.
+Website pencatatan reimburse perusahaan. Dibuat dengan Next.js, Neon Postgres, SMTP Brevo, dan export PDF.
 
 ## Fitur
 
-- **Registrasi user** (nama, email, password) dengan **verifikasi email** via Resend.
+- **Registrasi user** (nama, email, password) dengan **verifikasi email** via SMTP Brevo.
 - **Login**. Nama user otomatis tercatat di setiap rekap.
 - **Input reimburse** bertahap:
   1. Ketik nama project (ada saran dari project yang pernah diinput)
@@ -29,7 +29,7 @@ app/
   api/reimburse            GET list, POST input; [id] DELETE
   api/photo/[id]           tampilkan foto (pemilik / admin)
   api/export               file .pdf (admin)
-lib/                       db (Neon), schema, session (JWT), email (Resend)
+lib/                       db (Neon), schema, session (JWT), email (SMTP Brevo)
 middleware.js              proteksi /dashboard & /admin
 ```
 
@@ -50,9 +50,10 @@ Buka http://localhost:3000
 
 1. **Neon**: buat project di https://console.neon.tech, lalu salin *pooled connection string*.
    Atau tambahkan integrasi Neon dari Vercel Marketplace, yang akan mengisi `DATABASE_URL` otomatis.
-2. **Resend**: buat API key di https://resend.com/api-keys.
-   Verifikasi domain pengirim (mis. `mekansm.com`) di menu *Domains*.
-   > Tanpa domain terverifikasi, Resend hanya bisa mengirim ke email pemilik akun Resend.
+2. **Brevo**: buka **SMTP & API → SMTP** di https://app.brevo.com.
+   Salin **SMTP login** dan buat **SMTP key** (bukan API key atau password akun).
+   Tambahkan dan verifikasi alamat pengirim di Brevo sebelum mengirim email.
+   SMTP login hanya untuk autentikasi; jangan gunakan sebagai alamat pengirim.
 3. Push project ke GitHub, lalu di Vercel pilih **Add New → Project** dan import repo-nya.
 4. Di **Settings → Environment Variables**, isi:
 
@@ -60,8 +61,12 @@ Buka http://localhost:3000
    |---|---|
    | `DATABASE_URL` | `postgresql://...-pooler...neon.tech/neondb?sslmode=require` |
    | `SESSION_SECRET` | string acak 64 karakter |
-   | `RESEND_API_KEY` | `re_...` |
-   | `RESEND_FROM` | `Rekap Reimburse <noreply@mekansm.com>` |
+   | `SMTP_HOST` | `smtp-relay.brevo.com` |
+   | `SMTP_PORT` | `587` (STARTTLS) |
+   | `SMTP_USER` | SMTP login dari Brevo |
+   | `SMTP_PASSWORD` | SMTP key dari Brevo |
+   | `SMTP_FROM` | `Rekap Reimburse <alamat-pengirim-terverifikasi>` |
+   | `SMTP_REPLY_TO` | `arul.amir20@gmail.com` (opsional) |
    | `APP_URL` | `https://nama-project.vercel.app` |
    | `ADMIN_EMAIL` | `admin@mekansm.com` |
    | `ADMIN_PASSWORD` | `Novarion1` |

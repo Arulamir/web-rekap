@@ -13,7 +13,7 @@ export async function POST(req) {
     try {
       await sendVerificationEmail({ to: email, name: user.name, url: `${appUrl(req)}/api/auth/verify?token=${token.raw}` });
     } catch (err) {
-      console.error('Resend error:', err);
+      console.error('SMTP email error:', { code: err.code, responseCode: err.responseCode });
       return json({ error: `Gagal mengirim email: ${err.message}` }, 502);
     }
   }
