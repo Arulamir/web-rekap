@@ -15,7 +15,7 @@ Website pencatatan reimburse perusahaan. Dibuat dengan Next.js, Neon Postgres, S
 - **Admin** (`admin@mekansm.com` / `Novarion1`):
   - Melihat semua data, dengan filter orang, project, kategori, dan rentang tanggal
   - **Rekap per orang**: jumlah item, subtotal Operasional/Material, dan total tiap user. Tombol *Lihat* menampilkan detail item orang tersebut, dan *Export PDF* mengekspor rekap satu orang saja.
-  - Menghapus data
+  - Menghapus satu item atau beberapa item sekaligus melalui checkbox pada **Detail Item**. Checkbox header memilih semua item yang sedang ditampilkan; pilihan direset saat filter berubah. Penghapusan memerlukan konfirmasi dan ikut menghapus foto pada item tersebut.
   - **Export PDF**, hanya untuk admin. Isinya tabel rekap (tanggal, nama, project, kategori, item, harga), subtotal Operasional/Material dan TOTAL, lalu lampiran foto nota/bukti pembayaran di bawah tabel. Filter yang aktif ikut diterapkan.
 
 ## Struktur

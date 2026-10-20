@@ -29,11 +29,16 @@ export default function AdminClient() {
   const [rows, setRows] = useState(null);
   const [people, setPeople] = useState([]);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+  const selectAllRef = useRef(null);
   const detailRef = useRef(null);
 
   const load = useCallback(async (f) => {
     setError('');
     setRows(null);
+    setSelectedIds([]);
     const qsAll = toQuery({ ...f, user: '' });
     const qs = toQuery(f);
     try {
@@ -53,6 +58,12 @@ export default function AdminClient() {
     load(applied);
   }, [applied, load]);
 
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedIds.length > 0 && selectedIds.length < (rows?.length || 0);
+    }
+  }, [selectedIds, rows]);
+
   function showPerson(id) {
     const next = { ...applied, user: String(id) };
     setFilters({ ...filters, user: String(id) });
@@ -65,10 +76,31 @@ export default function AdminClient() {
     setApplied({ ...applied, user: '' });
   }
 
-  async function remove(id) {
-    if (!confirm('Hapus data reimburse ini? Tindakan ini tidak dapat dibatalkan.')) return;
-    const res = await fetch(`/api/reimburse/${id}`, { method: 'DELETE' });
-    if (res.ok) load(applied);
+  function toggleItem(id) {
+    setSelectedIds((ids) => ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]);
+  }
+
+  async function removeItems(ids) {
+    if (deleting || ids.length === 0) return;
+    if (!confirm(`Hapus ${ids.length} item reimburse yang dipilih beserta fotonya? Tindakan ini tidak dapat dibatalkan.`)) return;
+    setDeleting(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await fetch('/api/reimburse/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus item.');
+      await load(applied);
+      setNotice(`${data.count} item reimburse berhasil dihapus.`);
+    } catch (e) {
+      setError(e.message || 'Tidak dapat terhubung ke server.');
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const set = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
@@ -96,51 +128,54 @@ export default function AdminClient() {
           setApplied({ ...filters, project: filters.project.trim() });
         }}
       >
-        <label className="field">
-          <span>Project</span>
-          <input placeholder="Cari project" value={filters.project} onChange={set('project')} />
-        </label>
-        <label className="field">
-          <span>Orang</span>
-          <select value={filters.user} onChange={set('user')}>
-            <option value="">Semua orang</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Kategori</span>
-          <select value={filters.category} onChange={set('category')}>
-            <option value="">Semua</option>
-            <option value="operasional">Operasional</option>
-            <option value="material">Material</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>Dari tanggal</span>
-          <input type="date" value={filters.from} onChange={set('from')} />
-        </label>
-        <label className="field">
-          <span>Sampai tanggal</span>
-          <input type="date" value={filters.to} onChange={set('to')} />
-        </label>
-        <div className="filter-actions">
-          <button className="btn btn-primary">Terapkan</button>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => {
-              setFilters(emptyFilters);
-              setApplied(emptyFilters);
-            }}
-          >
-            Reset
-          </button>
-        </div>
+        <fieldset className="filter-fields" disabled={deleting}>
+          <label className="field">
+            <span>Project</span>
+            <input placeholder="Cari project" value={filters.project} onChange={set('project')} />
+          </label>
+          <label className="field">
+            <span>Orang</span>
+            <select value={filters.user} onChange={set('user')}>
+              <option value="">Semua orang</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Kategori</span>
+            <select value={filters.category} onChange={set('category')}>
+              <option value="">Semua</option>
+              <option value="operasional">Operasional</option>
+              <option value="material">Material</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Dari tanggal</span>
+            <input type="date" value={filters.from} onChange={set('from')} />
+          </label>
+          <label className="field">
+            <span>Sampai tanggal</span>
+            <input type="date" value={filters.to} onChange={set('to')} />
+          </label>
+          <div className="filter-actions">
+            <button className="btn btn-primary">Terapkan</button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setFilters(emptyFilters);
+                setApplied(emptyFilters);
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        </fieldset>
       </form>
 
       {error && <div className="alert error">{error}</div>}
+      {notice && <div className="alert success" role="status">{notice}</div>}
 
       <section className="card table-wrap">
         <div className="section-head">
@@ -174,7 +209,7 @@ export default function AdminClient() {
                   <td className="num nowrap"><b>{rupiah(p.total)}</b></td>
                   <td>
                     <div className="row-gap actions">
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => showPerson(p.id)}>Lihat</button>
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={deleting} onClick={() => showPerson(p.id)}>Lihat</button>
                       <a className="btn btn-primary btn-sm" href={exportUrl({ ...applied, user: String(p.id) })}>Export PDF</a>
                     </div>
                   </td>
@@ -189,7 +224,7 @@ export default function AdminClient() {
         {applied.user && (
           <div className="alert success person-banner">
             <span>Menampilkan rekap <b>{selectedName}</b></span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={clearPerson}>Tampilkan semua orang</button>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={deleting} onClick={clearPerson}>Tampilkan semua orang</button>
           </div>
         )}
 
@@ -203,6 +238,13 @@ export default function AdminClient() {
         <section className="card table-wrap">
           <div className="section-head">
             <h2>Detail Item{applied.user ? `: ${selectedName}` : ''}</h2>
+            <div className="bulk-actions">
+              <span className="muted">{selectedIds.length} item dipilih dari {list.length} item yang ditampilkan</span>
+              <button type="button" className="btn btn-danger btn-sm" disabled={deleting || selectedIds.length === 0} onClick={() => removeItems(selectedIds)}>
+                {deleting ? 'Menghapus…' : `Hapus terpilih (${selectedIds.length})`}
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={deleting || selectedIds.length === 0} onClick={() => setSelectedIds([])}>Batalkan pilihan</button>
+            </div>
           </div>
           {rows === null ? (
             <p className="muted">Memuat…</p>
@@ -212,6 +254,9 @@ export default function AdminClient() {
             <table>
               <thead>
                 <tr>
+                  <th className="selection-cell">
+                    <input ref={selectAllRef} type="checkbox" aria-label="Pilih semua item yang ditampilkan" checked={list.length > 0 && selectedIds.length === list.length} disabled={deleting} onChange={(e) => setSelectedIds(e.target.checked ? list.map((r) => r.id) : [])} />
+                  </th>
                   <th>Tanggal</th>
                   <th>Nama</th>
                   <th>Project</th>
@@ -224,7 +269,10 @@ export default function AdminClient() {
               </thead>
               <tbody>
                 {list.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} className={selectedIds.includes(r.id) ? 'row-selected' : ''}>
+                    <td className="selection-cell">
+                      <input type="checkbox" aria-label={`Pilih ${r.item} milik ${r.user_name}`} checked={selectedIds.includes(r.id)} disabled={deleting} onChange={() => toggleItem(r.id)} />
+                    </td>
                     <td className="nowrap">{tanggal(r.created_at)}</td>
                     <td>
                       {r.user_name}
@@ -239,7 +287,7 @@ export default function AdminClient() {
                         <img className="thumb" src={`/api/photo/${r.id}`} alt={r.item} loading="lazy" />
                       </a>
                     </td>
-                    <td><button className="link-danger" onClick={() => remove(r.id)}>Hapus</button></td>
+                    <td><button className="link-danger" disabled={deleting} onClick={() => removeItems([r.id])}>Hapus</button></td>
                   </tr>
                 ))}
               </tbody>
