@@ -9,6 +9,7 @@ import { FULL_RECEIPT } from '@/lib/receipt-preprocess';
 
 export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDetected, onUseDate }) {
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [text, setText] = useState('');
   const [candidates, setCandidates] = useState([]);
@@ -26,6 +27,7 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
   const [previewUrl, setPreviewUrl] = useState('');
   const workerRef = useRef(null);
   const runRef = useRef(0);
+  const aiAbortRef = useRef(null);
 
   useEffect(() => {
     setCrop(FULL_RECEIPT); setAngle(0); setMode('contrast'); setLayout('3');
@@ -47,6 +49,7 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
   useEffect(() => () => {
     runRef.current++;
     workerRef.current?.terminate();
+    aiAbortRef.current?.abort();
     onBusy(false);
   }, [onBusy]);
 
@@ -63,7 +66,7 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
   async function scan(previewOnly = false) {
     if (!file || busy) return;
     const run = ++runRef.current;
-    setBusy(true); onBusy(true); setError(''); setMessage(''); setProgress(0);
+    setBusy(true); setAiBusy(false); onBusy(true); setError(''); setMessage(''); setProgress(0);
     let timer;
     try {
       const job = (async () => {
@@ -108,10 +111,45 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
     }
   }
 
+  async function scanAi() {
+    if (!file || busy) return;
+    const run = ++runRef.current;
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+    setBusy(true); setAiBusy(true); onBusy(true); setError(''); setMessage('');
+    try {
+      // AI uses color strokes rather than a thresholded image. Crop/angle apply.
+      const image = await prepareReceiptImage(file, Number(angle), 2200, { crop, mode: 'original' });
+      if (runRef.current !== run) return;
+      if (image.size > 3 * 1024 * 1024) throw new Error('Foto terlalu besar untuk AI. Batasi area ke nota atau tabel item.');
+      const body = new FormData(); body.set('photo', image);
+      const response = await fetch('/api/reimburse/ocr', { method: 'POST', body, signal: controller.signal });
+      let result;
+      try { result = await response.json(); } catch { throw new Error('Server AI tidak merespons dengan benar. Coba lagi atau gunakan OCR browser.'); }
+      if (!response.ok) throw new Error(result.error || 'Pembacaan AI gagal.');
+      if (runRef.current !== run) return;
+      setText(result.text);
+      setCandidates(result.items.map((item, id) => ({ ...item, id })));
+      setReceiptTotal(result.receiptTotal);
+      setDetectedDate(result.purchaseDate);
+      setDateWarning(result.warnings.join(' '));
+      if (result.purchaseDate) onDateDetected?.(result.purchaseDate);
+      setMessage(result.items.length ? `${result.items.length} calon item dari AI. Periksa semuanya; baris meragukan belum dipilih otomatis.` : 'AI belum dapat membaca item. Coba foto lebih jelas, OCR browser, atau isi manual.');
+    } catch (error) {
+      if (runRef.current === run) setError(error.message || 'AI gagal membaca nota. Gunakan OCR browser atau isi manual.');
+    } finally {
+      if (runRef.current === run) {
+        runRef.current++; aiAbortRef.current = null;
+        setBusy(false); setAiBusy(false); onBusy(false);
+      }
+    }
+  }
+
   function cancel() {
     runRef.current++;
     workerRef.current?.terminate(); workerRef.current = null;
-    setBusy(false); onBusy(false); setMessage('Pembacaan dibatalkan. Anda tetap bisa mengisi item secara manual.');
+    aiAbortRef.current?.abort(); aiAbortRef.current = null;
+    setBusy(false); setAiBusy(false); onBusy(false); setMessage('Pembacaan dibatalkan. Anda tetap bisa mengisi item secara manual.');
   }
 
   function patch(id, values) {
@@ -133,7 +171,8 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
 
   return (
     <section className="ocr-panel stack" aria-label="Baca nota otomatis">
-      <p className="muted">OCR berjalan di browser tanpa API key. Batasi area ke nota atau tabel item agar meja tidak ikut terbaca. Pemrosesan hanya untuk OCR; foto bukti tetap utuh. Tulisan tangan tetap bisa meleset.</p>
+      <p className="muted">Pilih Gemini untuk mencoba membaca tulisan tangan, atau OCR browser tanpa mengirim foto ke layanan AI. Hasil tetap harus diperiksa. Pemilihan area tidak memotong foto bukti yang disimpan.</p>
+      <p className="muted">Tombol AI Gemini mengirim area foto ke Google, memakai warna asli serta sudut yang dipilih. Pada layanan gratis, data dapat dipakai Google untuk peningkatan produk; gunakan nota tanpa informasi pribadi/rahasia. Filter kontras dan hitam-putih di bawah berlaku untuk OCR browser. Batas akun: 2 percobaan/menit, 20/hari; kuota Google dapat lebih kecil.</p>
       {sourceUrl && <details className="stack" open>
         <summary>Atur area & kejernihan OCR</summary>
         <p className="muted">Geser batas area baca. Untuk nota bertabel, coba fokus pada baris item saja. Jika tanggal di luar area, isi tanggal secara manual.</p>
@@ -157,10 +196,11 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
         {previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer"><img className="ocr-result-preview" src={previewUrl} alt="Pratinjau gambar yang digunakan OCR" /><span>Perbesar hasil pemrosesan</span></a>}
       </details>}
       <div className="row-gap">
-        <button type="button" className="btn btn-primary btn-sm" disabled={!file || busy} onClick={() => scan()}>{busy ? `Memproses / membaca… ${progress}%` : 'Baca item & harga (OCR)'}</button>
+        <button type="button" className="btn btn-primary btn-sm" disabled={!file || busy} onClick={scanAi}>{aiBusy ? 'Gemini sedang membaca…' : 'Baca tulisan tangan (AI Gemini)'}</button>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={!file || busy} onClick={() => scan()}>{busy && !aiBusy ? `Memproses / membaca… ${progress}%` : 'Baca item & harga (OCR browser)'}</button>
         {busy && <button type="button" className="btn btn-ghost btn-sm" onClick={cancel}>Batalkan OCR</button>}
       </div>
-      {busy && <progress max="100" value={progress} aria-label="Kemajuan OCR" />}
+      {busy && <progress max="100" value={aiBusy ? undefined : progress} aria-label="Kemajuan OCR" />}
       {error && <div className="alert error" role="alert">{error}</div>}
       {message && <p role="status">{message}</p>}
       {text && /\d\s*[-–]\s*\d{3}\b/.test(text) && <p className="alert error">Ada pemisah nominal yang ambigu (tanda minus). Baris tersebut tidak dijadikan draf otomatis. Periksa foto, lalu koreksi nominal di teks OCR atau isi item manual.</p>}
