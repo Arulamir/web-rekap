@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { setTimeout as delay } from 'node:timers/promises';
 import { normalizeAiReceipt, readReceiptAi } from '../lib/receipt-ai.js';
 
 const fixture = () => ({ raw_text: 'Nota contoh', purchase_date: '21/10/26', receipt_total: 20000, warnings: [], items: [{ name: 'Barang contoh', quantity: 2, unit_price: 10000, line_total: 20000, uncertain: false }] });
@@ -29,7 +30,7 @@ test('bad shape and too many items are handled explicitly', () => {
   const result = normalizeAiReceipt(data); assert.equal(result.items.length, 10); assert.match(result.warnings.join(' '), /lebih dari 10/);
 });
 
-const options = () => ({ bytes: Buffer.from('fixture'), mimeType: 'image/png', apiKey: 'test-only-key', model: 'gemini-3.1-flash-lite' });
+const options = () => ({ bytes: Buffer.from('fixture'), mimeType: 'image/png', apiKey: 'test-only-key', model: 'gemini-3.1-flash-lite', waiter: async () => {} });
 test('provider call puts key in header and sends structured image extraction request', async () => {
   const result = await readReceiptAi({ ...options(), fetcher: async (url, request) => {
     assert.equal(url.includes('test-only-key'), false); assert.equal(request.headers['x-goog-api-key'], 'test-only-key');
@@ -47,4 +48,39 @@ test('quota and provider configuration failures never leak raw provider response
 test('malformed, truncated, safety-blocked, and network-failed responses never yield drafts', async () => {
   for (const payload of [{ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: JSON.stringify(fixture()) }] } }] }, { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{broken' }] } }] }, { promptFeedback: { blockReason: 'SAFETY' } }]) await assert.rejects(readReceiptAi({ ...options(), fetcher: async () => Response.json(payload) }));
   await assert.rejects(readReceiptAi({ ...options(), fetcher: async () => { throw new Error('network'); } }), (error) => error.status === 504);
+});
+
+const successResponse = () => Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(fixture()) }] } }] });
+test('transient 503/502 failures recover with bounded exponential backoff and the same deadline', async () => {
+  let calls = 0; const waits = []; const signals = [];
+  const result = await readReceiptAi({ ...options(), waiter: async (ms) => { waits.push(ms); }, fetcher: async (_, request) => {
+    signals.push(request.signal); calls++;
+    return calls === 1 ? new Response(null, { status: 503 }) : calls === 2 ? new Response(null, { status: 502 }) : successResponse();
+  } });
+  assert.equal(calls, 3); assert.equal(result.items[0].price, '10000');
+  assert.ok(waits[0] >= 1000 && waits[0] <= 1250); assert.ok(waits[1] >= 2000 && waits[1] <= 2250);
+  assert.equal(signals[0], signals[2]);
+});
+test('persistent busy service stops after three calls and reports 503 without leaking provider text', async () => {
+  let calls = 0;
+  await assert.rejects(readReceiptAi({ ...options(), fetcher: async () => { calls++; return Response.json({ error: { message: 'secret' } }, { status: 503 }); } }), (error) => error.status === 503 && /sedang sibuk/.test(error.message) && !error.message.includes('secret'));
+  assert.equal(calls, 3);
+});
+test('quota/configuration failures are not retried, while transient network failures can recover', async () => {
+  for (const status of [400, 401, 403, 404, 429]) {
+    let calls = 0;
+    await assert.rejects(readReceiptAi({ ...options(), fetcher: async () => { calls++; return new Response(null, { status }); } }));
+    assert.equal(calls, 1);
+  }
+  let calls = 0;
+  await readReceiptAi({ ...options(), fetcher: async () => { if (++calls === 1) throw new Error('connection'); return successResponse(); } });
+  assert.equal(calls, 2);
+});
+test('cancel during backoff and a shared expired deadline prevent further provider calls', async () => {
+  const controller = new AbortController(); let calls = 0;
+  await assert.rejects(readReceiptAi({ ...options(), signal: controller.signal, waiter: async () => { controller.abort(); }, fetcher: async () => { calls++; return new Response(null, { status: 503 }); } }), (error) => error.status === 499);
+  assert.equal(calls, 1);
+  calls = 0;
+  await assert.rejects(readReceiptAi({ ...options(), timeoutMs: 10, waiter: async (_, signal) => { await delay(50, undefined, { signal }); }, fetcher: async () => { calls++; return new Response(null, { status: 503 }); } }), (error) => error.status === 504);
+  assert.equal(calls, 1);
 });

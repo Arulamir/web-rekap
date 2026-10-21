@@ -196,11 +196,12 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
         {previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer"><img className="ocr-result-preview" src={previewUrl} alt="Pratinjau gambar yang digunakan OCR" /><span>Perbesar hasil pemrosesan</span></a>}
       </details>}
       <div className="row-gap">
-        <button type="button" className="btn btn-primary btn-sm" disabled={!file || busy} onClick={scanAi}>{aiBusy ? 'Gemini sedang membaca…' : 'Baca tulisan tangan (AI Gemini)'}</button>
+        <button type="button" className="btn btn-primary btn-sm" disabled={!file || busy} onClick={scanAi}>{aiBusy ? 'Gemini membaca / mencoba ulang…' : 'Baca tulisan tangan (AI Gemini)'}</button>
         <button type="button" className="btn btn-ghost btn-sm" disabled={!file || busy} onClick={() => scan()}>{busy && !aiBusy ? `Memproses / membaca… ${progress}%` : 'Baca item & harga (OCR browser)'}</button>
         {busy && <button type="button" className="btn btn-ghost btn-sm" onClick={cancel}>Batalkan OCR</button>}
       </div>
       {busy && <progress max="100" value={aiBusy ? undefined : progress} aria-label="Kemajuan OCR" />}
+      {aiBusy && <p className="muted" role="status">Jika Gemini sedang sibuk, website mencoba ulang otomatis hingga 3 kali dengan jeda. Waktu tunggu AI maksimal 45 detik. Anda bisa membatalkan.</p>}
       {error && <div className="alert error" role="alert">{error}</div>}
       {message && <p role="status">{message}</p>}
       {text && /\d\s*[-–]\s*\d{3}\b/.test(text) && <p className="alert error">Ada pemisah nominal yang ambigu (tanda minus). Baris tersebut tidak dijadikan draf otomatis. Periksa foto, lalu koreksi nominal di teks OCR atau isi item manual.</p>}
