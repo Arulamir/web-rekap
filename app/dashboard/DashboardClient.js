@@ -83,7 +83,8 @@ export default function DashboardClient({ userName }) {
     setProcessingPhotos((count) => count + 1);
     try {
       const compressed = await compressImage(file);
-      const ocrFile = await prepareReceiptImage(file);
+      // Keep source resolution for cropping; the stored evidence has its own compression.
+      const ocrFile = file;
       setSharedPhoto({ file: compressed, preview: URL.createObjectURL(compressed), ocrFile });
     } catch (e) {
       setError(e.message);
@@ -97,7 +98,7 @@ export default function DashboardClient({ userName }) {
     setProcessingPhotos((count) => count + 1);
     setError('');
     try {
-      const rotated = await prepareReceiptImage(sharedPhoto.ocrFile, 90);
+      const rotated = await prepareReceiptImage(sharedPhoto.ocrFile, 90, 4096, { lossless: true });
       const compressed = await compressImage(rotated);
       setSharedPhoto({ file: compressed, preview: URL.createObjectURL(compressed), ocrFile: rotated });
     } catch (e) { setError(e.message); }

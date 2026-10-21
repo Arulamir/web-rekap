@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { receiptNumber, parseReceiptText } from '../lib/receipt-parser.js';
 import { normalizeItem } from '../lib/reimburse-item.js';
 
+test('ambiguous dash amounts never become partial prices', () => {
+  const result = parseReceiptText('4 Barang A 35.000 140-000]\n10 Barang B 4.000 410-000\n50 Barang C 800 40.000\nTOTAL 220-000');
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].price, '800');
+  assert.equal(result.receiptTotal, null);
+});
+
 test('Indonesian and English currency separators and decimal quantities', () => {
   for (const [raw, expected] of [['Rp 10.000', 10000], ['10,000.00', 10000], ['10.000,00', 10000], ['4.00', 4], ['2,5', 2.5], ['150000', 150000]]) {
     assert.equal(receiptNumber(raw), expected, raw);

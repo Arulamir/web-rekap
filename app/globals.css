@@ -121,6 +121,14 @@ input:focus, select:focus { outline: 2px solid var(--primary-soft); border-color
 .ocr-panel .row-gap { flex-wrap: wrap; }
 .ocr-panel .btn { white-space: normal; }
 .ocr-panel details p { overflow-wrap: anywhere; }
+.ocr-crop-view { position: relative; width: fit-content; max-width: 100%; margin: 12px auto; overflow: hidden; }
+.ocr-crop-view > img { display: block; max-width: 100%; max-height: 420px; width: auto; height: auto; }
+.ocr-crop-box { position: absolute; border: 2px solid #0f766e; box-shadow: 0 0 0 600px #0007; pointer-events: none; }
+.ocr-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border: 0; padding: 0; margin: 12px 0; min-width: 0; }
+.ocr-settings .field { min-width: 0; }
+.ocr-settings input[type="range"] { padding: 0; width: 100%; accent-color: var(--primary); }
+.ocr-result-preview { display: block; max-width: 100%; max-height: 360px; width: auto; margin: 12px auto; }
+@media (max-width: 560px) { .ocr-settings { grid-template-columns: minmax(0, 1fr); } }
 .check-label { display: flex; gap: 8px; align-items: center; }
 .check-label input[type="checkbox"] { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--primary); }
 .item-head { display: flex; justify-content: space-between; align-items: center; }
