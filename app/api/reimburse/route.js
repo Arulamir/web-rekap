@@ -28,6 +28,8 @@ export async function POST(req) {
   const fd = await req.formData();
   const project = String(fd.get('project') || '').trim();
   const category = String(fd.get('category') || '');
+  const photoMode = String(fd.get('photo_mode') || 'per-item');
+  if (!['per-item', 'shared'].includes(photoMode)) return json({ error: 'Mode foto tidak valid.' }, 400);
   let items;
   try {
     items = JSON.parse(String(fd.get('items') || '[]'));
@@ -42,10 +44,12 @@ export async function POST(req) {
 
   const sql = await db();
   const inserts = [];
+  const sharedPhoto = photoMode === 'shared' ? fd.get('photo_shared') : null;
+  let sharedData;
   for (let i = 0; i < items.length; i++) {
     const item = String(items[i]?.item || '').trim();
     const price = Number(items[i]?.price);
-    const photo = fd.get(`photo_${i}`);
+    const photo = photoMode === 'shared' ? sharedPhoto : fd.get(`photo_${i}`);
     const n = i + 1;
     if (!item || item.length > 200) return json({ error: `Item #${n}: nama barang wajib diisi.` }, 400);
     if (!Number.isSafeInteger(price) || price <= 0) return json({ error: `Item #${n}: harga harus lebih dari 0.` }, 400);
@@ -53,7 +57,8 @@ export async function POST(req) {
     if (!photo.type.startsWith('image/')) return json({ error: `Item #${n}: file harus berupa gambar.` }, 400);
     if (photo.size > MAX_PHOTO) return json({ error: `Item #${n}: ukuran foto maksimal 3 MB.` }, 400);
 
-    const data = Buffer.from(await photo.arrayBuffer()).toString('base64');
+    const data = sharedData ?? Buffer.from(await photo.arrayBuffer()).toString('base64');
+    if (photoMode === 'shared') sharedData = data;
     inserts.push(sql`
       INSERT INTO reimbursements (user_id, user_name, project, category, item, price, photo_data, photo_type)
       VALUES (${session.id}, ${session.name}, ${project}, ${category}, ${item}, ${price}, ${data}, ${photo.type})`);

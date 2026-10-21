@@ -9,7 +9,7 @@ Website pencatatan reimburse perusahaan. Dibuat dengan Next.js, Neon Postgres, S
 - **Input reimburse** bertahap:
   1. Ketik nama project (ada saran dari project yang pernah diinput)
   2. Pilih kategori **Operasional** atau **Material**
-  3. Isi item: nama barang, harga, foto (bisa beberapa item sekaligus, maks. 10)
+  3. Isi item: nama barang dan harga (maks. 10 item). Pilih foto berbeda untuk tiap item, atau **satu foto nota untuk semua item**, lalu unggah nota sekali.
 - Foto dikompres otomatis di browser (maks. 1280 px, JPEG) lalu disimpan di Neon.
 - **Riwayat** milik user sendiri.
 - **Admin** (`admin@mekansm.com` / `Novarion1`):

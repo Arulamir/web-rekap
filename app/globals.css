@@ -112,6 +112,7 @@ input:focus, select:focus { outline: 2px solid var(--primary-soft); border-color
 .choice:hover, .choice.selected { border-color: var(--primary); background: #f0fdfa; }
 
 .item-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.reimburse-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .item-head { display: flex; justify-content: space-between; align-items: center; }
 .upload-box { border: 2px dashed var(--border); border-radius: 10px; padding: 22px; background: #fafafa; color: var(--muted); font: inherit; cursor: pointer; }
 .upload-box:hover { border-color: var(--primary); color: var(--primary); }
