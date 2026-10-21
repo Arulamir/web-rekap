@@ -2,18 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { rupiah, tanggal, kategoriLabel, compressImage } from '@/lib/format';
+import ReceiptOcr from '@/app/components/ReceiptOcr';
+import { lineTotal, normalizeItem } from '@/lib/reimburse-item';
+import { prepareReceiptImage } from '@/lib/receipt-image';
 
 const MAX_ITEMS = 10;
 let keySeq = 0;
-const emptyItem = () => ({ key: ++keySeq, item: '', price: '', file: null, preview: '' });
+const emptyItem = () => ({ key: ++keySeq, item: '', quantity: '1', price: '', file: null, preview: '' });
+const hasDraftInput = (item) => Boolean(item.item.trim() || item.price || item.file || item.quantity !== '1');
 
 export default function DashboardClient({ userName }) {
   const [step, setStep] = useState(1);
   const [project, setProject] = useState('');
   const [category, setCategory] = useState('');
   const [items, setItems] = useState([emptyItem()]);
-  const [photoMode, setPhotoMode] = useState('per-item');
-  const [sharedPhoto, setSharedPhoto] = useState({ file: null, preview: '' });
+  const [photoMode, setPhotoMode] = useState('shared');
+  const [sharedPhoto, setSharedPhoto] = useState({ file: null, preview: '', ocrFile: null });
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [processingPhotos, setProcessingPhotos] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -71,11 +76,13 @@ export default function DashboardClient({ userName }) {
 
   async function onSharedPhoto(file) {
     if (!file) return;
+    if (file.size > 20 * 1024 * 1024) return setError('Foto maksimal 20 MB sebelum diperkecil.');
     setError('');
     setProcessingPhotos((count) => count + 1);
     try {
       const compressed = await compressImage(file);
-      setSharedPhoto({ file: compressed, preview: URL.createObjectURL(compressed) });
+      const ocrFile = await prepareReceiptImage(file);
+      setSharedPhoto({ file: compressed, preview: URL.createObjectURL(compressed), ocrFile });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -83,21 +90,42 @@ export default function DashboardClient({ userName }) {
     }
   }
 
-  const total = items.reduce((s, it) => s + (Number(it.price) || 0), 0);
+  async function rotateSharedPhoto() {
+    if (!sharedPhoto.ocrFile || ocrBusy) return;
+    setProcessingPhotos((count) => count + 1);
+    setError('');
+    try {
+      const rotated = await prepareReceiptImage(sharedPhoto.ocrFile, 90);
+      const compressed = await compressImage(rotated);
+      setSharedPhoto({ file: compressed, preview: URL.createObjectURL(compressed), ocrFile: rotated });
+    } catch (e) { setError(e.message); }
+    finally { setProcessingPhotos((count) => count - 1); }
+  }
+
+  const filledItems = items.filter(hasDraftInput);
+  const total = items.reduce((s, it) => s + lineTotal(it.quantity, it.price), 0);
+
+  function applyOcr(drafts) {
+    setItems((list) => {
+      const existing = list.filter(hasDraftInput);
+      if (existing.length + drafts.length > MAX_ITEMS) return list;
+      return [...existing, ...drafts.map((draft) => ({ ...emptyItem(), item: draft.item, quantity: draft.quantity, price: draft.price }))];
+    });
+  }
 
   async function submit() {
-    if (submitting || processingPhotos > 0) return;
+    if (submitting || processingPhotos > 0 || ocrBusy) return;
     setError('');
     if (photoMode === 'shared' && !sharedPhoto.file) return setError('Unggah satu foto nota untuk semua item.');
     for (const [i, it] of items.entries()) {
-      if (!it.item.trim()) return setError(`Item #${i + 1}: isi nama barang.`);
-      if (!(Number(it.price) > 0)) return setError(`Item #${i + 1}: isi harga.`);
+      try { normalizeItem({ item: it.item, quantity: it.quantity, unit_price: it.price }); }
+      catch (err) { return setError(`Item #${i + 1}: ${err.message}`); }
       if (photoMode === 'per-item' && !it.file) return setError(`Item #${i + 1}: unggah foto nota/barang.`);
     }
     const fd = new FormData();
     fd.append('project', project.trim());
     fd.append('category', category);
-    fd.append('items', JSON.stringify(items.map((it) => ({ item: it.item.trim(), price: Number(it.price) }))));
+    fd.append('items', JSON.stringify(items.map((it) => ({ item: it.item.trim(), quantity: Number(it.quantity), unit_price: Number(it.price) }))));
     fd.append('photo_mode', photoMode);
     if (photoMode === 'shared') fd.append('photo_shared', sharedPhoto.file);
     else items.forEach((it, i) => fd.append(`photo_${i}`, it.file));
@@ -110,7 +138,7 @@ export default function DashboardClient({ userName }) {
       items.forEach((it) => it.preview && URL.revokeObjectURL(it.preview));
       setSuccess(`${data.count} item untuk project "${project.trim()}" berhasil disimpan.`);
       setItems([emptyItem()]);
-      setSharedPhoto({ file: null, preview: '' });
+      setSharedPhoto({ file: null, preview: '', ocrFile: null });
       setCategory('');
       setStep(1);
       if (!projects.includes(project.trim())) setProjects([project.trim(), ...projects]);
@@ -207,10 +235,10 @@ export default function DashboardClient({ userName }) {
 
         {step === 3 && (
           <fieldset className="stack reimburse-fields" disabled={submitting || processingPhotos > 0}>
-            <Summary project={project} category={category} onEdit={() => setStep(2)} />
+            <Summary project={project} category={category} disabled={ocrBusy} onEdit={() => setStep(2)} />
             <label className="field">
               <span>Penggunaan foto nota</span>
-              <select value={photoMode} onChange={(e) => { setPhotoMode(e.target.value); setError(''); }}>
+              <select value={photoMode} disabled={ocrBusy} onChange={(e) => { setPhotoMode(e.target.value); setError(''); }}>
                 <option value="per-item">Foto berbeda untuk tiap item</option>
                 <option value="shared">Satu foto nota untuk semua item</option>
               </select>
@@ -218,7 +246,9 @@ export default function DashboardClient({ userName }) {
             {photoMode === 'shared' && (
               <div className="item-card">
                 <p className="muted">Unggah nota sekali, lalu isi nama dan harga masing-masing item di bawah. Foto ini digunakan untuk semua item dalam pengajuan ini.</p>
-                <PhotoUpload preview={sharedPhoto.preview} onPhoto={onSharedPhoto} label="Foto nota bersama" />
+                <PhotoUpload preview={sharedPhoto.preview} onPhoto={onSharedPhoto} label="Foto nota bersama" disabled={ocrBusy} />
+                {sharedPhoto.file && <button type="button" className="btn btn-ghost btn-sm" disabled={ocrBusy} onClick={rotateSharedPhoto}>Putar foto 90°</button>}
+                <ReceiptOcr file={sharedPhoto.ocrFile} available={MAX_ITEMS - filledItems.length} onApply={applyOcr} onBusy={setOcrBusy} />
               </div>
             )}
             {items.map((it, i) => (
@@ -243,8 +273,8 @@ export default function DashboardClient({ userName }) {
               <b>{rupiah(total)}</b>
             </div>
             <div className="row-gap">
-              <button type="button" className="btn btn-ghost" onClick={() => setStep(2)} disabled={submitting}>Kembali</button>
-              <button type="button" className="btn btn-primary grow" onClick={submit} disabled={submitting}>
+              <button type="button" className="btn btn-ghost" onClick={() => setStep(2)} disabled={submitting || ocrBusy}>Kembali</button>
+              <button type="button" className="btn btn-primary grow" onClick={submit} disabled={submitting || ocrBusy}>
                 {submitting ? 'Menyimpan…' : processingPhotos > 0 ? 'Memproses foto…' : 'Simpan Reimburse'}
               </button>
             </div>
@@ -275,6 +305,7 @@ export default function DashboardClient({ userName }) {
                       {r.project} · <span className={`tag ${r.category}`}>{kategoriLabel(r.category)}</span>
                     </small>
                     <small className="muted">{tanggal(r.created_at)}</small>
+                    <small className="muted">{r.quantity ?? 1} × {rupiah(r.unit_price ?? r.price)}</small>
                   </div>
                   <div className="right">
                     <b>{rupiah(r.price)}</b>
@@ -290,7 +321,7 @@ export default function DashboardClient({ userName }) {
   );
 }
 
-function Summary({ project, category, onEdit }) {
+function Summary({ project, category, onEdit, disabled = false }) {
   return (
     <div className="summary">
       <div>
@@ -300,7 +331,7 @@ function Summary({ project, category, onEdit }) {
           <span className={`tag ${category}`} style={{ marginLeft: 8 }}>{kategoriLabel(category)}</span>
         )}
       </div>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>Ubah</button>
+      <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} onClick={onEdit}>Ubah</button>
     </div>
   );
 }
@@ -318,8 +349,13 @@ function ItemCard({ index, it, canRemove, onChange, onPhoto, onRemove, showPhoto
         <span>Barang / item yang dibeli</span>
         <input maxLength={200} placeholder="mis. Semen 50kg x 10 sak" value={it.item} onChange={(e) => onChange({ item: e.target.value })} />
       </label>
+      <div className="item-amounts">
       <label className="field">
-        <span>Harga (Rp)</span>
+        <span>Qty</span>
+        <input inputMode="decimal" value={it.quantity} onChange={(e) => onChange({ quantity: e.target.value.replace(',', '.') })} />
+      </label>
+      <label className="field">
+        <span>Harga satuan (Rp)</span>
         <input
           inputMode="numeric"
           placeholder="0"
@@ -327,12 +363,14 @@ function ItemCard({ index, it, canRemove, onChange, onPhoto, onRemove, showPhoto
           onChange={(e) => onChange({ price: e.target.value.replace(/\D/g, '').slice(0, 15) })}
         />
       </label>
+      </div>
+      <p className="muted">Total item: <b>{rupiah(lineTotal(it.quantity, it.price))}</b></p>
       {showPhoto && <PhotoUpload preview={it.preview} onPhoto={onPhoto} label={`Foto nota / barang item #${index + 1}`} />}
     </div>
   );
 }
 
-function PhotoUpload({ preview, onPhoto, label }) {
+function PhotoUpload({ preview, onPhoto, label, disabled = false }) {
   const inputRef = useRef(null);
   return (
       <div className="field">
@@ -343,6 +381,7 @@ function PhotoUpload({ preview, onPhoto, label }) {
           accept="image/*"
           aria-label={label}
           hidden
+          disabled={disabled}
           onChange={(e) => {
             onPhoto(e.target.files?.[0]);
             e.target.value = '';
@@ -350,11 +389,12 @@ function PhotoUpload({ preview, onPhoto, label }) {
         />
         {preview ? (
           <div className="photo-preview">
-            <img src={preview} alt={label} />
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => inputRef.current?.click()}>Ganti foto</button>
+            <a href={preview} target="_blank" rel="noreferrer" aria-label={`Perbesar ${label}`}><img src={preview} alt={label} /></a>
+            <a className="btn btn-ghost btn-sm" href={preview} target="_blank" rel="noreferrer">Perbesar foto</a>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} onClick={() => inputRef.current?.click()}>Ganti foto</button>
           </div>
         ) : (
-          <button type="button" className="upload-box" onClick={() => inputRef.current?.click()}>
+          <button type="button" className="upload-box" disabled={disabled} onClick={() => inputRef.current?.click()}>
             Ambil / pilih foto
           </button>
         )}

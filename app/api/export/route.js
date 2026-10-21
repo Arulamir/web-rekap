@@ -28,6 +28,7 @@ export async function GET(req) {
   }
   const rows = await sql.query(
     `SELECT r.id, r.user_name, r.project, r.category, r.item, r.price::float8 AS price,
+            r.quantity::float8 AS quantity, COALESCE(r.unit_price, r.price)::float8 AS unit_price,
             r.photo_data, r.photo_type, r.created_at
      FROM reimbursements r
      ${where} ORDER BY r.created_at ASC, r.id ASC`,

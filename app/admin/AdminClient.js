@@ -262,7 +262,9 @@ export default function AdminClient() {
                   <th>Project</th>
                   <th>Kategori</th>
                   <th>Barang / Item</th>
-                  <th className="num">Harga</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Harga satuan</th>
+                  <th className="num">Total</th>
                   <th>Foto</th>
                   <th></th>
                 </tr>
@@ -281,6 +283,8 @@ export default function AdminClient() {
                     <td>{r.project}</td>
                     <td><span className={`tag ${r.category}`}>{kategoriLabel(r.category)}</span></td>
                     <td>{r.item}</td>
+                    <td className="num nowrap">{r.quantity ?? 1}</td>
+                    <td className="num nowrap">{rupiah(r.unit_price ?? r.price)}</td>
                     <td className="num nowrap">{rupiah(r.price)}</td>
                     <td>
                       <a href={`/api/photo/${r.id}`} target="_blank" rel="noreferrer">

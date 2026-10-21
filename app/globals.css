@@ -113,10 +113,20 @@ input:focus, select:focus { outline: 2px solid var(--primary-soft); border-color
 
 .item-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .reimburse-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.item-amounts { display: grid; grid-template-columns: minmax(80px, 0.6fr) minmax(0, 1.4fr); gap: 12px; }
+.ocr-panel { border-top: 1px solid var(--border); padding-top: 14px; }
+.ocr-panel textarea { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--border); border-radius: 8px; resize: vertical; }
+.ocr-panel progress { width: 100%; accent-color: var(--primary); }
+.ocr-panel summary { cursor: pointer; color: var(--primary); }
+.ocr-panel .row-gap { flex-wrap: wrap; }
+.ocr-panel .btn { white-space: normal; }
+.ocr-panel details p { overflow-wrap: anywhere; }
+.check-label { display: flex; gap: 8px; align-items: center; }
+.check-label input[type="checkbox"] { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--primary); }
 .item-head { display: flex; justify-content: space-between; align-items: center; }
 .upload-box { border: 2px dashed var(--border); border-radius: 10px; padding: 22px; background: #fafafa; color: var(--muted); font: inherit; cursor: pointer; }
 .upload-box:hover { border-color: var(--primary); color: var(--primary); }
-.photo-preview { display: flex; align-items: center; gap: 12px; }
+.photo-preview { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .photo-preview img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
 
 .total-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: var(--primary-soft); color: var(--primary-hover); border-radius: 8px; font-size: 1.05rem; }
