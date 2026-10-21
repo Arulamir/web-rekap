@@ -13,6 +13,7 @@ Website pencatatan reimburse perusahaan. Dibuat dengan Next.js, Neon Postgres, S
 - Foto dikompres otomatis di browser (maks. 1280 px, JPEG) lalu disimpan di Neon.
 - **Baca nota (OCR)** tanpa API key, dijalankan di browser dengan Tesseract.js bahasa Indonesia/Inggris. Pada mode satu foto bersama, unggah nota, putar jika perlu, lalu klik **Baca item & harga (OCR)**. Edit teks atau calon item, pilih hasil yang sesuai, dan tambahkan ke formulir. Tidak ada penyimpanan otomatis atau penimpaan item manual. Maksimal 10 item per pengajuan tetap berlaku.
 - **Qty, harga satuan, dan total**: total dihitung ulang di server. Data lama tetap memakai total aslinya dengan Qty 1. Qty baru mendukung hingga 3 angka desimal; Rupiah dibulatkan ke bilangan bulat.
+- **Tanggal beli di nota (DD/MM/YY)**: OCR mengisi kolom tanggal yang masih kosong, tetap dapat diedit atau diisi manual. Pada satu foto bersama, tanggal berlaku untuk seluruh item; pada foto per item, isi tanggal masing-masing. Tahun dua digit berarti 2000–2099. Kalender divalidasi di server. Tanggal beli disimpan terpisah dari waktu input, tampil di riwayat/admin/PDF; data lama tanpa tanggal diberi keterangan belum dicatat. Filter rentang tanggal admin tetap berdasarkan tanggal input.
 - **Riwayat** milik user sendiri.
 - **Admin** (`admin@mekansm.com` / `Novarion1`):
   - Melihat semua data, dengan filter orang, project, kategori, dan rentang tanggal

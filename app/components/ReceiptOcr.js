@@ -5,19 +5,21 @@ import { parseReceiptText } from '@/lib/receipt-parser';
 import { lineTotal, normalizeItem } from '@/lib/reimburse-item';
 import { rupiah } from '@/lib/format';
 
-export default function ReceiptOcr({ file, available, onApply, onBusy }) {
+export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDetected, onUseDate }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [text, setText] = useState('');
   const [candidates, setCandidates] = useState([]);
   const [receiptTotal, setReceiptTotal] = useState(null);
+  const [detectedDate, setDetectedDate] = useState('');
+  const [dateWarning, setDateWarning] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const workerRef = useRef(null);
   const runRef = useRef(0);
 
   useEffect(() => {
-    setText(''); setCandidates([]); setReceiptTotal(null); setError(''); setMessage('');
+    setText(''); setCandidates([]); setReceiptTotal(null); setDetectedDate(''); setDateWarning(''); setError(''); setMessage('');
   }, [file]);
   useEffect(() => () => {
     runRef.current++;
@@ -29,6 +31,9 @@ export default function ReceiptOcr({ file, available, onApply, onBusy }) {
     const result = parseReceiptText(value);
     setCandidates(result.items.map((item, id) => ({ ...item, id, selected: true })));
     setReceiptTotal(result.receiptTotal);
+    setDetectedDate(result.purchaseDate);
+    setDateWarning(result.dateWarning);
+    if (result.purchaseDate) onDateDetected?.(result.purchaseDate);
     setMessage(result.items.length ? `${result.items.length} calon item ditemukan. Periksa dan edit sebelum digunakan.` : 'Item dan harga belum terbaca. Perbaiki teks bacaan atau isi item secara manual.');
   }
 
@@ -106,6 +111,12 @@ export default function ReceiptOcr({ file, available, onApply, onBusy }) {
       {busy && <progress max="100" value={progress} aria-label="Kemajuan OCR" />}
       {error && <div className="alert error" role="alert">{error}</div>}
       {message && <p role="status">{message}</p>}
+      {detectedDate && <div className="stack">
+        <p>Tanggal nota dari OCR: <b>{detectedDate}</b>. Periksa kembali, terutama tahunnya. Tanggal yang sudah diisi manual tidak ditimpa otomatis.</p>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => onUseDate?.(detectedDate)}>Gunakan tanggal OCR {detectedDate}</button>
+      </div>}
+      {dateWarning && <p className="alert error">{dateWarning}</p>}
+      {text && !detectedDate && !dateWarning && <p className="muted">Tanggal nota belum terbaca. Isi tanggal beli secara manual dengan format DD/MM/YY.</p>}
       {text && <details>
         <summary>Teks yang terbaca (bisa diedit)</summary>
         <label className="field"><span>Teks OCR</span><textarea rows={8} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} /></label>

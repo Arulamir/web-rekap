@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { rupiah, tanggal, kategoriLabel } from '@/lib/format';
+import { formatPurchaseDate } from '@/lib/purchase-date';
 
 const emptyFilters = { project: '', category: '', from: '', to: '', user: '' };
 
@@ -151,11 +152,11 @@ export default function AdminClient() {
             </select>
           </label>
           <label className="field">
-            <span>Dari tanggal</span>
+          <span>Dari tanggal input</span>
             <input type="date" value={filters.from} onChange={set('from')} />
           </label>
           <label className="field">
-            <span>Sampai tanggal</span>
+          <span>Sampai tanggal input</span>
             <input type="date" value={filters.to} onChange={set('to')} />
           </label>
           <div className="filter-actions">
@@ -257,7 +258,8 @@ export default function AdminClient() {
                   <th className="selection-cell">
                     <input ref={selectAllRef} type="checkbox" aria-label="Pilih semua item yang ditampilkan" checked={list.length > 0 && selectedIds.length === list.length} disabled={deleting} onChange={(e) => setSelectedIds(e.target.checked ? list.map((r) => r.id) : [])} />
                   </th>
-                  <th>Tanggal</th>
+                  <th>Tanggal beli</th>
+                  <th>Tanggal input</th>
                   <th>Nama</th>
                   <th>Project</th>
                   <th>Kategori</th>
@@ -275,6 +277,7 @@ export default function AdminClient() {
                     <td className="selection-cell">
                       <input type="checkbox" aria-label={`Pilih ${r.item} milik ${r.user_name}`} checked={selectedIds.includes(r.id)} disabled={deleting} onChange={() => toggleItem(r.id)} />
                     </td>
+                    <td className="nowrap">{formatPurchaseDate(r.purchase_date)}</td>
                     <td className="nowrap">{tanggal(r.created_at)}</td>
                     <td>
                       {r.user_name}

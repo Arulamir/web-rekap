@@ -5,11 +5,12 @@ import { rupiah, tanggal, kategoriLabel, compressImage } from '@/lib/format';
 import ReceiptOcr from '@/app/components/ReceiptOcr';
 import { lineTotal, normalizeItem } from '@/lib/reimburse-item';
 import { prepareReceiptImage } from '@/lib/receipt-image';
+import { purchaseDateToIso, formatPurchaseDate } from '@/lib/purchase-date';
 
 const MAX_ITEMS = 10;
 let keySeq = 0;
-const emptyItem = () => ({ key: ++keySeq, item: '', quantity: '1', price: '', file: null, preview: '' });
-const hasDraftInput = (item) => Boolean(item.item.trim() || item.price || item.file || item.quantity !== '1');
+const emptyItem = () => ({ key: ++keySeq, item: '', quantity: '1', price: '', purchaseDate: '', file: null, preview: '' });
+const hasDraftInput = (item) => Boolean(item.item.trim() || item.price || item.purchaseDate || item.file || item.quantity !== '1');
 
 export default function DashboardClient({ userName }) {
   const [step, setStep] = useState(1);
@@ -18,6 +19,7 @@ export default function DashboardClient({ userName }) {
   const [items, setItems] = useState([emptyItem()]);
   const [photoMode, setPhotoMode] = useState('shared');
   const [sharedPhoto, setSharedPhoto] = useState({ file: null, preview: '', ocrFile: null });
+  const [sharedPurchaseDate, setSharedPurchaseDate] = useState('');
   const [ocrBusy, setOcrBusy] = useState(false);
   const [processingPhotos, setProcessingPhotos] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -105,11 +107,15 @@ export default function DashboardClient({ userName }) {
   const filledItems = items.filter(hasDraftInput);
   const total = items.reduce((s, it) => s + lineTotal(it.quantity, it.price), 0);
 
+  const fillDetectedDate = useCallback((date) => {
+    setSharedPurchaseDate((current) => current || date);
+  }, []);
+
   function applyOcr(drafts) {
     setItems((list) => {
       const existing = list.filter(hasDraftInput);
       if (existing.length + drafts.length > MAX_ITEMS) return list;
-      return [...existing, ...drafts.map((draft) => ({ ...emptyItem(), item: draft.item, quantity: draft.quantity, price: draft.price }))];
+      return [...existing, ...drafts.map((draft) => ({ ...emptyItem(), item: draft.item, quantity: draft.quantity, price: draft.price, purchaseDate: sharedPurchaseDate }))];
     });
   }
 
@@ -118,14 +124,17 @@ export default function DashboardClient({ userName }) {
     setError('');
     if (photoMode === 'shared' && !sharedPhoto.file) return setError('Unggah satu foto nota untuk semua item.');
     for (const [i, it] of items.entries()) {
-      try { normalizeItem({ item: it.item, quantity: it.quantity, unit_price: it.price }); }
+      try {
+        normalizeItem({ item: it.item, quantity: it.quantity, unit_price: it.price });
+        purchaseDateToIso(photoMode === 'shared' ? sharedPurchaseDate : it.purchaseDate);
+      }
       catch (err) { return setError(`Item #${i + 1}: ${err.message}`); }
       if (photoMode === 'per-item' && !it.file) return setError(`Item #${i + 1}: unggah foto nota/barang.`);
     }
     const fd = new FormData();
     fd.append('project', project.trim());
     fd.append('category', category);
-    fd.append('items', JSON.stringify(items.map((it) => ({ item: it.item.trim(), quantity: Number(it.quantity), unit_price: Number(it.price) }))));
+    fd.append('items', JSON.stringify(items.map((it) => ({ item: it.item.trim(), quantity: Number(it.quantity), unit_price: Number(it.price), purchase_date: photoMode === 'shared' ? sharedPurchaseDate : it.purchaseDate }))));
     fd.append('photo_mode', photoMode);
     if (photoMode === 'shared') fd.append('photo_shared', sharedPhoto.file);
     else items.forEach((it, i) => fd.append(`photo_${i}`, it.file));
@@ -139,6 +148,7 @@ export default function DashboardClient({ userName }) {
       setSuccess(`${data.count} item untuk project "${project.trim()}" berhasil disimpan.`);
       setItems([emptyItem()]);
       setSharedPhoto({ file: null, preview: '', ocrFile: null });
+      setSharedPurchaseDate('');
       setCategory('');
       setStep(1);
       if (!projects.includes(project.trim())) setProjects([project.trim(), ...projects]);
@@ -246,9 +256,14 @@ export default function DashboardClient({ userName }) {
             {photoMode === 'shared' && (
               <div className="item-card">
                 <p className="muted">Unggah nota sekali, lalu isi nama dan harga masing-masing item di bawah. Foto ini digunakan untuk semua item dalam pengajuan ini.</p>
+                <label className="field">
+                  <span>Tanggal beli di nota (DD/MM/YY)</span>
+                  <input type="text" placeholder="DD/MM/YY" maxLength={8} value={sharedPurchaseDate} disabled={ocrBusy} onChange={(e) => setSharedPurchaseDate(e.target.value)} />
+                  <small className="muted">Berlaku untuk semua item pada nota ini. OCR mengisi jika kosong; periksa tanggal dan tahun atau isi manual.</small>
+                </label>
                 <PhotoUpload preview={sharedPhoto.preview} onPhoto={onSharedPhoto} label="Foto nota bersama" disabled={ocrBusy} />
                 {sharedPhoto.file && <button type="button" className="btn btn-ghost btn-sm" disabled={ocrBusy} onClick={rotateSharedPhoto}>Putar foto 90°</button>}
-                <ReceiptOcr file={sharedPhoto.ocrFile} available={MAX_ITEMS - filledItems.length} onApply={applyOcr} onBusy={setOcrBusy} />
+                <ReceiptOcr file={sharedPhoto.ocrFile} available={MAX_ITEMS - filledItems.length} onApply={applyOcr} onBusy={setOcrBusy} onDateDetected={fillDetectedDate} onUseDate={setSharedPurchaseDate} />
               </div>
             )}
             {items.map((it, i) => (
@@ -304,7 +319,8 @@ export default function DashboardClient({ userName }) {
                     <small className="muted">
                       {r.project} · <span className={`tag ${r.category}`}>{kategoriLabel(r.category)}</span>
                     </small>
-                    <small className="muted">{tanggal(r.created_at)}</small>
+                    <small className="muted">Tanggal beli: {formatPurchaseDate(r.purchase_date)}</small>
+                    <small className="muted">Diinput: {tanggal(r.created_at)}</small>
                     <small className="muted">{r.quantity ?? 1} × {rupiah(r.unit_price ?? r.price)}</small>
                   </div>
                   <div className="right">
@@ -349,6 +365,10 @@ function ItemCard({ index, it, canRemove, onChange, onPhoto, onRemove, showPhoto
         <span>Barang / item yang dibeli</span>
         <input maxLength={200} placeholder="mis. Semen 50kg x 10 sak" value={it.item} onChange={(e) => onChange({ item: e.target.value })} />
       </label>
+      {showPhoto && <label className="field">
+        <span>Tanggal beli item #{index + 1} (DD/MM/YY)</span>
+        <input type="text" placeholder="DD/MM/YY" maxLength={8} value={it.purchaseDate} onChange={(e) => onChange({ purchaseDate: e.target.value })} />
+      </label>}
       <div className="item-amounts">
       <label className="field">
         <span>Qty</span>
