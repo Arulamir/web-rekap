@@ -15,7 +15,7 @@ export async function POST(req) {
   const requestUrl = new URL(req.url);
   const expectedOrigin = `${req.headers.get('x-forwarded-proto') || requestUrl.protocol.slice(0, -1)}://${req.headers.get('host') || requestUrl.host}`;
   if (origin && origin !== expectedOrigin) return json({ error: 'Asal permintaan tidak diizinkan.' }, 403);
-  if (!process.env.GEMINI_API_KEY) return json({ error: 'GEMINI_API_KEY belum diset di server. Gunakan OCR browser sementara.' }, 503);
+  if (!process.env.GROQ_API_KEY) return json({ error: 'GROQ_API_KEY belum diset di server. Gunakan OCR browser sementara.' }, 503);
   const length = Number(req.headers.get('content-length'));
   if (length > 3.3 * 1024 * 1024) return json({ error: 'Foto OCR maksimal 3 MB. Perkecil atau batasi area foto.' }, 413);
   let photo;

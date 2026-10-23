@@ -171,8 +171,8 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
 
   return (
     <section className="ocr-panel stack" aria-label="Baca nota otomatis">
-      <p className="muted">Pilih Gemini untuk mencoba membaca tulisan tangan, atau OCR browser tanpa mengirim foto ke layanan AI. Hasil tetap harus diperiksa. Pemilihan area tidak memotong foto bukti yang disimpan.</p>
-      <p className="muted">Tombol AI Gemini mengirim area foto ke Google, memakai warna asli serta sudut yang dipilih. Pada layanan gratis, data dapat dipakai Google untuk peningkatan produk; gunakan nota tanpa informasi pribadi/rahasia. Filter kontras dan hitam-putih di bawah berlaku untuk OCR browser. Batas akun: 2 percobaan/menit, 20/hari; kuota Google dapat lebih kecil.</p>
+      <p className="muted">Pilih Groq untuk mencoba membaca tulisan tangan, atau OCR browser tanpa mengirim foto ke layanan AI. Hasil tetap harus diperiksa. Pemilihan area tidak memotong foto bukti yang disimpan.</p>
+      <p className="muted">Tombol AI Groq mengirim area foto ke layanan Groq, memakai warna asli serta sudut yang dipilih. Filter kontras dan hitam-putih di bawah berlaku untuk OCR browser. Batas akun: 2 percobaan/menit, 20/hari; kuota Groq dapat lebih kecil.</p>
       {sourceUrl && <details className="stack" open>
         <summary>Atur area & kejernihan OCR</summary>
         <p className="muted">Geser batas area baca. Untuk nota bertabel, coba fokus pada baris item saja. Jika tanggal di luar area, isi tanggal secara manual.</p>
@@ -196,12 +196,12 @@ export default function ReceiptOcr({ file, available, onApply, onBusy, onDateDet
         {previewUrl && <a href={previewUrl} target="_blank" rel="noreferrer"><img className="ocr-result-preview" src={previewUrl} alt="Pratinjau gambar yang digunakan OCR" /><span>Perbesar hasil pemrosesan</span></a>}
       </details>}
       <div className="row-gap">
-        <button type="button" className="btn btn-primary btn-sm" disabled={!file || busy} onClick={scanAi}>{aiBusy ? 'Gemini membaca / mencoba ulang…' : 'Baca tulisan tangan (AI Gemini)'}</button>
+        <button type="button" className="btn btn-primary btn-sm" disabled={!file || busy} onClick={scanAi}>{aiBusy ? 'Groq membaca / mencoba ulang…' : 'Baca tulisan tangan (AI Groq)'}</button>
         <button type="button" className="btn btn-ghost btn-sm" disabled={!file || busy} onClick={() => scan()}>{busy && !aiBusy ? `Memproses / membaca… ${progress}%` : 'Baca item & harga (OCR browser)'}</button>
         {busy && <button type="button" className="btn btn-ghost btn-sm" onClick={cancel}>Batalkan OCR</button>}
       </div>
       {busy && <progress max="100" value={aiBusy ? undefined : progress} aria-label="Kemajuan OCR" />}
-      {aiBusy && <p className="muted" role="status">Jika Gemini sedang sibuk, website mencoba ulang otomatis hingga 3 kali dengan jeda. Waktu tunggu AI maksimal 45 detik. Anda bisa membatalkan.</p>}
+      {aiBusy && <p className="muted" role="status">Jika Groq sedang sibuk, website mencoba ulang otomatis hingga 3 kali dengan jeda. Waktu tunggu AI maksimal 45 detik. Anda bisa membatalkan.</p>}
       {error && <div className="alert error" role="alert">{error}</div>}
       {message && <p role="status">{message}</p>}
       {text && /\d\s*[-–]\s*\d{3}\b/.test(text) && <p className="alert error">Ada pemisah nominal yang ambigu (tanda minus). Baris tersebut tidak dijadikan draf otomatis. Periksa foto, lalu koreksi nominal di teks OCR atau isi item manual.</p>}

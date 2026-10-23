@@ -30,13 +30,18 @@ test('bad shape and too many items are handled explicitly', () => {
   const result = normalizeAiReceipt(data); assert.equal(result.items.length, 10); assert.match(result.warnings.join(' '), /lebih dari 10/);
 });
 
-const options = () => ({ bytes: Buffer.from('fixture'), mimeType: 'image/png', apiKey: 'test-only-key', model: 'gemini-3.1-flash-lite', waiter: async () => {} });
+const options = () => ({ bytes: Buffer.from('fixture'), mimeType: 'image/png', apiKey: 'test-only-key', model: 'qwen/qwen3.8-27b', waiter: async () => {} });
 test('provider call puts key in header and sends structured image extraction request', async () => {
   const result = await readReceiptAi({ ...options(), fetcher: async (url, request) => {
-    assert.equal(url.includes('test-only-key'), false); assert.equal(request.headers['x-goog-api-key'], 'test-only-key');
-    const body = JSON.parse(request.body); assert.equal(body.generationConfig.responseMimeType, 'application/json');
-    assert.equal(body.contents[0].parts[1].inlineData.mimeType, 'image/png');
-    return Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ thought: true, text: 'ignore' }, { text: JSON.stringify(fixture()) }] } }] });
+    assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions');
+    assert.equal(url.includes('test-only-key'), false); assert.equal(request.headers.Authorization, 'Bearer test-only-key');
+    const body = JSON.parse(request.body); assert.equal(body.response_format.type, 'json_schema');
+    assert.equal(body.response_format.json_schema.strict, true);
+    assert.equal(body.response_format.json_schema.schema.additionalProperties, false);
+    assert.equal(body.response_format.json_schema.schema.properties.items.items.additionalProperties, false);
+    assert.equal(body.messages[1].content[1].image_url.url, 'data:image/png;base64,Zml4dHVyZQ==');
+    assert.equal(body.model, 'qwen/qwen3.8-27b'); assert.equal(body.reasoning_effort, 'none');
+    return successResponse();
   } });
   assert.equal(result.items[0].item, 'Barang contoh');
 });
@@ -46,11 +51,11 @@ test('quota and provider configuration failures never leak raw provider response
   });
 });
 test('malformed, truncated, safety-blocked, and network-failed responses never yield drafts', async () => {
-  for (const payload of [{ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: JSON.stringify(fixture()) }] } }] }, { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{broken' }] } }] }, { promptFeedback: { blockReason: 'SAFETY' } }]) await assert.rejects(readReceiptAi({ ...options(), fetcher: async () => Response.json(payload) }));
+  for (const payload of [{ choices: [{ finish_reason: 'length', message: { content: JSON.stringify(fixture()) } }] }, { choices: [{ finish_reason: 'stop', message: { content: '{broken' } }] }, { choices: [{ finish_reason: 'content_filter', message: { content: null } }] }, { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(fixture()) }] } }] }]) await assert.rejects(readReceiptAi({ ...options(), fetcher: async () => Response.json(payload) }));
   await assert.rejects(readReceiptAi({ ...options(), fetcher: async () => { throw new Error('network'); } }), (error) => error.status === 504);
 });
 
-const successResponse = () => Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(fixture()) }] } }] });
+const successResponse = () => Response.json({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(fixture()) } }] });
 test('transient 503/502 failures recover with bounded exponential backoff and the same deadline', async () => {
   let calls = 0; const waits = []; const signals = [];
   const result = await readReceiptAi({ ...options(), waiter: async (ms) => { waits.push(ms); }, fetcher: async (_, request) => {
